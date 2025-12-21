@@ -72,6 +72,7 @@ async function run() {
         const database = client.db('blood-projects')
         const userCollection = database.collection('user')
         const requestCollection = database.collection('request')
+        const paymentCollection = database.collection('payment')
 
         app.post('/users', async (req, res) => {
             console.log(req.body)
@@ -159,8 +160,8 @@ async function run() {
                         price_data: {
                             currency: 'usd',
                             unit_amount: amount,
-                            product_data:{
-                                name:'please Donate'
+                            product_data: {
+                                name: 'please Donate'
                             }
                         },
 
@@ -174,17 +175,141 @@ async function run() {
                 customer_email: information?.donorEmail,
                 success_url: `${process.env.SITE_DOMAIN}/payment-success?session_id={CHECKOUT_SESSION_ID}`,
 
-                 cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled`,
+                cancel_url: `${process.env.SITE_DOMAIN}/payment-cancelled`,
 
 
             });
-        
-            res.send({url:session.url})
 
-
+            res.send({ url: session.url })
 
 
         })
+
+
+
+        // app.post('/success-payment', async(req,res)=>{
+        //     const {session_Id} =req.query;
+        //     const session = await stripe.checkout.sessions.retrieve(session_Id);
+        //     console.log(session);
+
+        // })
+
+
+
+
+        // app.post("/success-payment", async (req, res) => {
+        //     try {
+        //         const { session_id } = req.query;
+
+        //         if (!session_id) {
+        //             return res.status(400).json({ error: "Session ID missing" });
+        //         }
+
+        //         const session = await stripe.checkout.sessions.retrieve(session_id);
+
+        //         console.log("STRIPE SESSION:", session);
+
+        //         res.json({
+        //             success: true,
+        //             status: session.payment_status,
+        //         });
+        //     } catch (error) {
+        //         console.error(error.message);
+        //         res.status(500).json({ error: error.message });
+        //     }
+
+        // const transactionId=session.payment_intent;
+
+        // if(session.payment_status =='paid'){
+        //     const payment_Info={
+        //         amount:session.amount_total/100,
+        //         currency:session.currency,
+        //         donorEmail:session.customer_email,
+        //         transactionId,
+        //         payment_status:session.payment_status,
+        //         paidAt: new data()
+
+
+        //     }
+        //     const result =await paymentCollection.insertOne(payment_Info)
+        //     return res.send(result)
+
+        // }
+
+        // });
+
+
+
+        app.post("/success-payment", async (req, res) => {
+            try {
+                const { session_id } = req.query;
+
+                if (!session_id) {
+                    return res.status(400).json({ error: "Session ID missing" });
+                }
+
+                const session = await stripe.checkout.sessions.retrieve(session_id);
+
+                console.log("STRIPE SESSION:", session);
+
+
+                if (session.payment_status === "paid") {
+                    const payment_Info = {
+                        amount: session.amount_total / 100,
+                        currency: session.currency,
+                        donorEmail: session.customer_email,
+                        transactionId: session.payment_intent,
+                        payment_status: session.payment_status,
+                        paidAt: new Date(),
+                    };
+
+                    const result = await paymentCollection.insertOne(payment_Info);
+
+                    return res.status(200).json({
+                        success: true,
+                        message: "Payment saved successfully",
+                        insertedId: result.insertedId,
+                    });
+                }
+
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Payment not completed",
+                });
+
+            } catch (error) {
+                console.error("PAYMENT ERROR:", error.message);
+                res.status(500).json({ error: error.message });
+            }
+        });
+
+
+
+        //   get for search 
+
+        app.get('/search-request', async (req, res) => {
+            const { bloodGroup, district, upazila } = req.query;
+
+            const query = {};
+
+            if (!query) {
+                return;
+            }
+            if (bloodGroup) {
+                const fixed = bloodGroup.replace(/ /g, "+").trim();
+                query.bloodGroup = fixed;
+            }
+            if (district) {
+                query.district = district;
+            }
+            if (upazila) {
+                query.upazilas = upazila
+            }
+            console.log(query)
+        })
+
+
 
 
 
