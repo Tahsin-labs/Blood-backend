@@ -51,7 +51,7 @@ const verifyFBToken = async (req, res, next) => {
 
 
 
-const uri = "mongodb+srv://Blood-Baskend:6WDk7VgSasIE61JU@cluster0.be4pazl.mongodb.net/?appName=Cluster0";
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.be4pazl.mongodb.net/?appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
@@ -65,7 +65,7 @@ const client = new MongoClient(uri, {
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
-        await client.connect();
+        // await client.connect();
 
 
 
@@ -288,29 +288,58 @@ async function run() {
 
         //   get for search 
 
-        app.get('/search-request', async (req, res) => {
-            const { bloodGroup, district, upazila } = req.query;
+        // app.get('/search-request', async (req, res) => {
+        //     const { bloodGroup, district, upazila } = req.query;
 
-            const query = {};
+        //     const query = {};
 
-            if (!query) {
-                return;
-            }
-            if (bloodGroup) {
-                const fixed = bloodGroup.replace(/ /g, "+").trim();
-                query.bloodGroup = fixed;
-            }
-            if (district) {
-                query.district = district;
-            }
-            if (upazila) {
-                query.upazilas = upazila
-            }
-            console.log(query)
-        })
+        //     if (!query) {
+        //         return;
+        //     }
+        //     if (bloodGroup) {
+        //         const fixed = bloodGroup.replace(/ /g, "+").trim();
+        //         query.bloodGroup = fixed;
+        //     }
+        //     if (district) {
+        //         query.district = district;
+        //     }
+        //     if (upazila) {
+        //         query.upazilas = upazila
+        //     }
+        //     console.log(query)
+        // })
 
 
 
+app.get('/search-request', async (req, res) => {
+    try {
+        const { bloodGroup, district, upazila } = req.query;
+        const query = {};
+
+        if (bloodGroup) {
+            query.bloodGroup = bloodGroup;
+        }
+        if (district) {
+            query.district = district;
+        }
+        if (upazila) {
+            query.upazilas = upazila; 
+        }
+
+        console.log("SEARCH QUERY:", query);
+
+        const result = await requestCollection
+            .find(query)
+            .toArray();
+
+        console.log("FOUND:", result);
+
+        res.send(result);
+    } catch (error) {
+        console.error("SEARCH ERROR:", error);
+        res.status(500).send({ message: "Server error" });
+    }
+});
 
 
 
@@ -336,6 +365,116 @@ async function run() {
 
 
 
+// .............................................................................................
+
+
+
+
+app.get('/donation-requests/recent', verifyFBToken, async (req, res) => {
+    try {
+        const email = req.decoded_email;
+
+        const result = await requestCollection
+            .find({ email })
+            .sort({ createdAt: -1 })
+            .limit(3)
+            .toArray();
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to load recent requests" });
+    }
+});
+
+
+
+
+
+
+const { ObjectId } = require('mongodb');
+
+app.get('/donation-requests/:id', verifyFBToken, async (req, res) => {
+    try {
+        const id = req.params.id;
+
+        const result = await requestCollection.findOne({
+            _id: new ObjectId(id)
+        });
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to get request" });
+    }
+});
+
+
+
+app.delete('/donation-requests/:id', verifyFBToken, async (req, res) => {
+    try {
+        const id = req.params.id;
+
+        const result = await requestCollection.deleteOne({
+            _id: new ObjectId(id)
+        });
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to delete request" });
+    }
+});
+
+
+
+
+app.put('/donation-requests/:id', verifyFBToken, async (req, res) => {
+    try {
+        const id = req.params.id;
+        const updatedData = req.body;
+
+        const result = await requestCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: updatedData }
+        );
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to update request" });
+    }
+});
+
+
+
+
+app.patch('/donation-requests/:id/status', verifyFBToken, async (req, res) => {
+    try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        if (!["done", "canceled"].includes(status)) {
+            return res.status(400).send({ message: "Invalid status" });
+        }
+
+        const result = await requestCollection.updateOne(
+            {
+                _id: new ObjectId(id),
+                status: "inprogress"
+            },
+            {
+                $set: { status }
+            }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.status(400).send({
+                message: "Status update not allowed"
+            });
+        }
+
+        res.send({ success: true });
+    } catch (error) {
+        res.status(500).send({ message: "Failed to update status" });
+    }
+});
 
 
 
@@ -353,7 +492,7 @@ async function run() {
 
         // Send a ping to confirm a successful connection
 
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // Ensures that the client will close when you finish/error
